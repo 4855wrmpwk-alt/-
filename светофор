@@ -1,0 +1,537 @@
+import tkinter as tk
+import time
+from datetime import datetime
+
+class AdvancedTrafficLight:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("🚦 Умный светофор")
+        self.root.geometry("450x700")
+        self.root.resizable(False, False)
+        
+        # Цвета
+        self.colors = {
+            'bg': '#1a1a2e',
+            'panel': '#16213e',
+            'accent': '#0f3460',
+            'text': '#e6e6e6'
+        }
+        
+        # Состояния
+        self.current_light = 'red'
+        self.is_running = False
+        self.auto_job = None
+        self.blink_mode = False
+        self.night_mode = False
+        
+        # Тайминги (в миллисекундах)
+        self.timings = {
+            'red': 5000,
+            'red_yellow': 2000,
+            'green': 4000,
+            'yellow': 2000,
+            'blink': 500
+        }
+        
+        # История
+        self.history = []
+        
+        self.setup_ui()
+        self.update_display()
+        
+    def setup_ui(self):
+        # Настройка темы
+        self.root.configure(bg=self.colors['bg'])
+        
+        # Заголовок
+        header_frame = tk.Frame(self.root, bg=self.colors['bg'])
+        header_frame.pack(fill='x', padx=20, pady=10)
+        
+        title_label = tk.Label(
+            header_frame,
+            text="🚦 УМНЫЙ СВЕТОФОР",
+            font=('Arial', 24, 'bold'),
+            fg='#fca311',
+            bg=self.colors['bg']
+        )
+        title_label.pack()
+        
+        sub_label = tk.Label(
+            header_frame,
+            text="Панель управления городским светофором",
+            font=('Arial', 10),
+            fg=self.colors['text'],
+            bg=self.colors['bg']
+        )
+        sub_label.pack()
+        
+        # Основной светофор
+        self.light_frame = tk.LabelFrame(
+            self.root,
+            text="Светофор",
+            font=('Arial', 12, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.RIDGE,
+            bd=3
+        )
+        self.light_frame.pack(pady=10, padx=20, fill='x')
+        
+        # Холст для светофора
+        self.canvas = tk.Canvas(
+            self.light_frame,
+            width=180,
+            height=350,
+            bg='#2c3e50',
+            highlightthickness=0
+        )
+        self.canvas.pack(pady=15)
+        
+        # Корпус светофора
+        self.canvas.create_rectangle(30, 20, 150, 330, fill='#1c2833', outline='#7f8c8d', width=3)
+        
+        # Лампы
+        self.red_lamp = self.canvas.create_oval(50, 40, 130, 120, fill='#4a0000', outline='#95a5a6', width=2)
+        self.red_yellow_lamp = self.canvas.create_oval(50, 135, 130, 215, fill='#4a4a00', outline='#95a5a6', width=2)
+        self.green_lamp = self.canvas.create_oval(50, 230, 130, 310, fill='#004a00', outline='#95a5a6', width=2)
+        
+        # Кнопки управления светом
+        light_control_frame = tk.LabelFrame(
+            self.root,
+            text="Управление сигналами",
+            font=('Arial', 11, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.GROOVE
+        )
+        light_control_frame.pack(pady=10, padx=20, fill='x')
+        
+        # Первый ряд кнопок
+        row1 = tk.Frame(light_control_frame, bg=self.colors['panel'])
+        row1.pack(pady=10)
+        
+        self.red_btn = tk.Button(
+            row1,
+            text="🔴 КРАСНЫЙ",
+            command=lambda: self.set_light('red'),
+            font=('Arial', 11, 'bold'),
+            bg='#e74c3c',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=3,
+            cursor='hand2'
+        )
+        self.red_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.red_yellow_btn = tk.Button(
+            row1,
+            text="🔴🟡 КРАСНЫЙ+ЖЕЛТЫЙ",
+            command=lambda: self.set_light('red_yellow'),
+            font=('Arial', 11, 'bold'),
+            bg='#f39c12',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=3,
+            cursor='hand2'
+        )
+        self.red_yellow_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Второй ряд кнопок
+        row2 = tk.Frame(light_control_frame, bg=self.colors['panel'])
+        row2.pack(pady=5)
+        
+        self.green_btn = tk.Button(
+            row2,
+            text="🟢 ЗЕЛЕНЫЙ",
+            command=lambda: self.set_light('green'),
+            font=('Arial', 11, 'bold'),
+            bg='#2ecc71',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=3,
+            cursor='hand2'
+        )
+        self.green_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.yellow_btn = tk.Button(
+            row2,
+            text="🟡 ЖЕЛТЫЙ",
+            command=lambda: self.set_light('yellow'),
+            font=('Arial', 11, 'bold'),
+            bg='#f1c40f',
+            fg='black',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=3,
+            cursor='hand2'
+        )
+        self.yellow_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Кнопки режимов
+        mode_frame = tk.LabelFrame(
+            self.root,
+            text="Режимы работы",
+            font=('Arial', 11, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.GROOVE
+        )
+        mode_frame.pack(pady=10, padx=20, fill='x')
+        
+        mode_row = tk.Frame(mode_frame, bg=self.colors['panel'])
+        mode_row.pack(pady=10)
+        
+        self.auto_btn = tk.Button(
+            mode_row,
+            text="▶️ АВТОМАТИЧЕСКИЙ",
+            command=self.toggle_auto,
+            font=('Arial', 11),
+            bg='#3498db',
+            fg='white',
+            width=15,
+            height=2,
+            relief=tk.RAISED,
+            bd=2,
+            cursor='hand2'
+        )
+        self.auto_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.blink_btn = tk.Button(
+            mode_row,
+            text="⚠️ МИГАЮЩИЙ ЖЕЛТЫЙ",
+            command=self.toggle_blink,
+            font=('Arial', 11),
+            bg='#f39c12',
+            fg='white',
+            width=15,
+            height=2,
+            relief=tk.RAISED,
+            bd=2,
+            cursor='hand2'
+        )
+        self.blink_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Кнопки управления
+        control_frame = tk.LabelFrame(
+            self.root,
+            text="Управление",
+            font=('Arial', 11, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.GROOVE
+        )
+        control_frame.pack(pady=10, padx=20, fill='x')
+        
+        control_row = tk.Frame(control_frame, bg=self.colors['panel'])
+        control_row.pack(pady=10)
+        
+        self.off_btn = tk.Button(
+            control_row,
+            text="⏹️ ВЫКЛЮЧИТЬ ВСЕ",
+            command=self.all_off,
+            font=('Arial', 11),
+            bg='#7f8c8d',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=2,
+            cursor='hand2'
+        )
+        self.off_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.emergency_btn = tk.Button(
+            control_row,
+            text="🚨 АВАРИЙНЫЙ РЕЖИМ",
+            command=self.emergency_mode,
+            font=('Arial', 11),
+            bg='#e74c3c',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=2,
+            cursor='hand2'
+        )
+        self.emergency_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.night_btn = tk.Button(
+            control_row,
+            text="🌙 НОЧНОЙ РЕЖИМ",
+            command=self.toggle_night_mode,
+            font=('Arial', 11),
+            bg='#34495e',
+            fg='white',
+            width=12,
+            height=2,
+            relief=tk.RAISED,
+            bd=2,
+            cursor='hand2'
+        )
+        self.night_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Панель информации
+        info_frame = tk.LabelFrame(
+            self.root,
+            text="Информация",
+            font=('Arial', 11, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.GROOVE
+        )
+        info_frame.pack(pady=10, padx=20, fill='x')
+        
+        self.status_label = tk.Label(
+            info_frame,
+            text="Статус: Ожидание команды",
+            font=('Arial', 12, 'bold'),
+            fg='#fca311',
+            bg=self.colors['panel'],
+            pady=5
+        )
+        self.status_label.pack()
+        
+        self.time_label = tk.Label(
+            info_frame,
+            text="Время: --:--:--",
+            font=('Arial', 10),
+            fg=self.colors['text'],
+            bg=self.colors['panel']
+        )
+        self.time_label.pack()
+        
+        # История
+        history_frame = tk.LabelFrame(
+            self.root,
+            text="История переключений",
+            font=('Arial', 11, 'bold'),
+            fg=self.colors['text'],
+            bg=self.colors['panel'],
+            relief=tk.GROOVE,
+            height=100
+        )
+        history_frame.pack(pady=10, padx=20, fill='both', expand=True)
+        
+        self.history_text = tk.Text(
+            history_frame,
+            height=5,
+            bg='#2c3e50',
+            fg='#ecf0f1',
+            font=('Consolas', 9),
+            wrap=tk.WORD
+        )
+        self.history_text.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        scrollbar = tk.Scrollbar(self.history_text)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.history_text.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.history_text.yview)
+        
+        # Обновление времени
+        self.update_time()
+        
+    def update_time(self):
+        """Обновление отображения времени"""
+        current_time = datetime.now().strftime("%H:%M:%S")
+        self.time_label.config(text=f"Время: {current_time}")
+        self.root.after(1000, self.update_time)
+        
+    def update_display(self):
+        """Обновить отображение светофора"""
+        # Выключить все лампы
+        self.canvas.itemconfig(self.red_lamp, fill='#4a0000')
+        self.canvas.itemconfig(self.red_yellow_lamp, fill='#4a4a00')
+        self.canvas.itemconfig(self.green_lamp, fill='#004a00')
+        
+        # Включить текущий свет
+        if self.current_light == 'red':
+            self.canvas.itemconfig(self.red_lamp, fill='#ff0000')
+            status_text = "СТОП! Красный сигнал"
+        elif self.current_light == 'red_yellow':
+            self.canvas.itemconfig(self.red_lamp, fill='#ff0000')
+            self.canvas.itemconfig(self.red_yellow_lamp, fill='#ffff00')
+            status_text = "ВНИМАНИЕ! Красный+Желтый"
+        elif self.current_light == 'green':
+            self.canvas.itemconfig(self.green_lamp, fill='#00ff00')
+            status_text = "МОЖНО ИДТИ! Зеленый сигнал"
+        elif self.current_light == 'yellow':
+            self.canvas.itemconfig(self.red_yellow_lamp, fill='#ffff00')
+            status_text = "ВНИМАНИЕ! Желтый сигнал"
+        else:
+            status_text = "Светофор выключен"
+            
+        self.status_label.config(text=f"Статус: {status_text}")
+        
+    def set_light(self, light):
+        """Установить конкретный свет"""
+        if self.is_running:
+            self.toggle_auto()
+        if self.blink_mode:
+            self.toggle_blink()
+            
+        self.current_light = light
+        self.update_display()
+        self.add_to_history(f"Установлен {light}")
+        
+    def all_off(self):
+        """Выключить все лампы"""
+        if self.is_running:
+            self.toggle_auto()
+        if self.blink_mode:
+            self.toggle_blink()
+            
+        self.current_light = 'off'
+        self.update_display()
+        self.add_to_history("Все сигналы выключены")
+        
+    def toggle_auto(self):
+        """Включить/выключить автоматический режим"""
+        if not self.is_running:
+            self.is_running = True
+            self.auto_btn.config(text="⏸️ ОСТАНОВИТЬ АВТО", bg='#e67e22')
+            self.add_to_history("Автоматический режим запущен")
+            self.auto_sequence()
+        else:
+            self.is_running = False
+            self.auto_btn.config(text="▶️ АВТОМАТИЧЕСКИЙ", bg='#3498db')
+            self.add_to_history("Автоматический режим остановлен")
+            if self.auto_job:
+                self.root.after_cancel(self.auto_job)
+                
+    def auto_sequence(self):
+        """Автоматическая последовательность"""
+        if not self.is_running:
+            return
+            
+        sequence = ['red', 'red_yellow', 'green', 'yellow']
+        current_index = sequence.index(self.current_light) if self.current_light in sequence else 0
+        
+        next_index = (current_index + 1) % len(sequence)
+        self.current_light = sequence[next_index]
+        self.update_display()
+        
+        # Определяем задержку
+        if self.current_light == 'red':
+            delay = self.timings['red']
+        elif self.current_light == 'red_yellow':
+            delay = self.timings['red_yellow']
+        elif self.current_light == 'green':
+            delay = self.timings['green']
+        else:  # yellow
+            delay = self.timings['yellow']
+            
+        self.auto_job = self.root.after(delay, self.auto_sequence)
+        
+    def toggle_blink(self):
+        """Включить/выключить мигающий желтый"""
+        if not self.blink_mode:
+            if self.is_running:
+                self.toggle_auto()
+                
+            self.blink_mode = True
+            self.blink_btn.config(text="⏸️ ОСТАНОВИТЬ МИГАНИЕ", bg='#d35400')
+            self.add_to_history("Мигающий желтый включен")
+            self.blink_yellow()
+        else:
+            self.blink_mode = False
+            self.blink_btn.config(text="⚠️ МИГАЮЩИЙ ЖЕЛТЫЙ", bg='#f39c12')
+            self.add_to_history("Мигающий желтый выключен")
+            
+    def blink_yellow(self):
+        """Мигающий желтый свет"""
+        if not self.blink_mode:
+            return
+            
+        if self.current_light == 'yellow':
+            self.current_light = 'off'
+        else:
+            self.current_light = 'yellow'
+            
+        self.update_display()
+        self.root.after(self.timings['blink'], self.blink_yellow)
+        
+    def emergency_mode(self):
+        """Аварийный режим - мигающий красный"""
+        if self.is_running:
+            self.toggle_auto()
+        if self.blink_mode:
+            self.toggle_blink()
+            
+        self.add_to_history("Аварийный режим активирован")
+        tk.messagebox.showwarning("Аварийный режим", 
+                                "Включен аварийный режим!\nСветофор мигает красным сигналом.")
+        
+        # Простая реализация мигания красным
+        def blink_red():
+            if self.current_light == 'red':
+                self.current_light = 'off'
+            else:
+                self.current_light = 'red'
+            self.update_display()
+            self.root.after(500, blink_red)
+            
+        blink_red()
+        
+    def toggle_night_mode(self):
+        """Включить/выключить ночной режим"""
+        self.night_mode = not self.night_mode
+        
+        if self.night_mode:
+            self.night_btn.config(text="☀️ ДНЕВНОЙ РЕЖИМ", bg='#f39c12')
+            self.colors['bg'] = '#0d1b2a'
+            self.colors['panel'] = '#1b263b'
+            self.add_to_history("Ночной режим включен")
+        else:
+            self.night_btn.config(text="🌙 НОЧНОЙ РЕЖИМ", bg='#34495e')
+            self.colors['bg'] = '#1a1a2e'
+            self.colors['panel'] = '#16213e'
+            self.add_to_history("Ночной режим выключен")
+            
+        # Обновляем цвета всех виджетов
+        self.update_colors()
+        
+    def update_colors(self):
+        """Обновить цвета всех виджетов"""
+        self.root.configure(bg=self.colors['bg'])
+        for widget in [self.light_frame, self.status_label, self.time_label]:
+            if hasattr(widget, 'config'):
+                widget.config(bg=self.colors['panel'])
+                
+    def add_to_history(self, event):
+        """Добавить событие в историю"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_entry = f"[{timestamp}] {event}\n"
+        self.history.append(log_entry)
+        
+        # Добавляем в текстовое поле
+        self.history_text.insert(tk.END, log_entry)
+        self.history_text.see(tk.END)
+        
+        # Ограничиваем историю 50 записями
+        if len(self.history) > 50:
+            self.history.pop(0)
+            self.history_text.delete(1.0, 2.0)
+
+def main():
+    root = tk.Tk()
+    app = AdvancedTrafficLight(root)
+    
+    # Центрирование окна
+    root.update_idletasks()
+    width = root.winfo_width()
+    height = root.winfo_height()
+    x = (root.winfo_screenwidth() // 2) - (width // 2)
+    y = (root.winfo_screenheight() // 2) - (height // 2)
+    root.geometry(f'{width}x{height}+{x}+{y}')
+    
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
